@@ -1,0 +1,36 @@
+services:
+    postgres:
+        image: postgres:12.1
+        container_name: postgres
+        hostname: postgres
+        ports:
+            - "5432:5432"
+        environment:
+            - POSTGRES_DB=gift_list
+            - POSTGRES_USER=gift_list
+            - POSTGRES_PASSWORD=cXlwjrjvnMnM
+        volumes:
+            - db-data:/var/lib/postgresql/data
+        restart: always
+        networks:
+            - app-network
+
+    pgadmin:
+        image: dpage/pgadmin4
+        container_name: pgadmin
+        ports:
+            - "15432:80"
+        environment:
+            PGADMIN_DEFAULT_EMAIL: admin@gift.com
+            PGADMIN_DEFAULT_PASSWORD: postgres
+        depends_on:
+            - postgres
+        networks:
+            - app-network
+        restart: always
+
+volumes:
+    db-data:
+
+networks:
+  app-network:
