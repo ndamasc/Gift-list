@@ -2,6 +2,7 @@ from datetime import datetime
 import re
 from flask_bcrypt import Bcrypt
 from app import db
+import uuid
 
 bcrypt = Bcrypt()
 
@@ -42,11 +43,15 @@ class User(db.Model):
         email_rgx = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
         return re.match(email_rgx, email) is not None
     
-    def check_user_credentials(email, password):
-        user = User.query.filter_by(email=email).first()
+
+    @classmethod
+    def check_user_credentials(cls, email, password):
+        user = cls.query.filter_by(email=email).first()
         if user and bcrypt.check_password_hash(user.password_hash, password):
             return user
         return None
+    
+
 
 class Gift(db.Model):
     __tablename__ = 'gifts'
@@ -77,6 +82,8 @@ class ReservedGift(db.Model):
     reserved_at = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     gift_id = db.Column(db.Integer, db.ForeignKey('gifts.id', ondelete='CASCADE'), nullable=False)
+    confirmed = db.Column(db.Boolean, default=False)
+    confirmation_token = db.Column(db.String(100), unique=True, nullable=True, default=lambda: str(uuid.uuid4()))
 
     user = db.relationship('User', back_populates='reservations')
     gift = db.relationship('Gift', back_populates='reservations')

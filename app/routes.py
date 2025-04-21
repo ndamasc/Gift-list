@@ -1,12 +1,16 @@
-from flask import Blueprint, jsonify, request, abort, session
-from app.models import User, Gift, ReservedGift, bcrypt
+from flask import Blueprint, jsonify, request, session, url_for
+from flask_mail import Mail, Message
 import jwt
-import datetime
-from app import db
+from app.models import User, Gift, ReservedGift, bcrypt
+from app.email_utils import send_confirmation_email
 from app.config import Config
+from app.decorators import admin_required, token_required
+import datetime
+from app import db, mail
+
 api_bp = Blueprint('api', __name__)
 
-
+mail = Mail()
 
 @api_bp.route('/login', methods=['POST'])
 def login():
@@ -22,7 +26,18 @@ def login():
     if not user :
         return jsonify({'error': 'Invalid email or password'}), 401  # Código 401 = não autorizado
 
-    return jsonify({'message': 'Login successful', 'user': user.to_dict()}), 200
+    
+
+    token = jwt.encode(
+        { 
+            'user_id' : user.id,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+        },
+        Config.SECRET_KEY,
+        algorithm='HS256'
+    )
+
+    return jsonify({'message': 'Login successful', 'token': token, 'user': user.to_dict()}), 200
     
 
 # User routes
@@ -78,9 +93,8 @@ def update_user(id):
         if User.query.filter_by(email=data['email']).first():
             return jsonify({'error': 'Email already exists'}), 400
     
-    for field in ['email', 'password_hash']:
-        if field in data:
-            setattr(user, field, data[field])
+    if 'password' in data and data['password'].strip():
+        user.set_password(data['password'])
     
     db.session.commit()
     return jsonify(user.to_dict())
@@ -109,12 +123,15 @@ def get_gift(id):
     gift = Gift.query.get_or_404(id)
     return jsonify(gift.to_dict())
 
+
+
 """'''
     criando rotas de presentes
 
 '''"""
 
 @api_bp.route('/gifts', methods=['POST'])
+@admin_required
 def create_gift():
     data = request.get_json() or {}
     
@@ -145,8 +162,7 @@ def update_post(id):
     
     for field in ['gift_title', 'image_path', 'link', 'reserved']:
         if field in data:
-            if field in data:
-                setattr(gift, field, data[field])
+            setattr(gift, field, data[field])
     
     db.session.commit()
     return jsonify(gift.to_dict())
@@ -166,34 +182,94 @@ def get_user_gifts(id):
 
     gifts = [reservation.gift.to_dict() for reservation in reserved_gifts]
 
-    return jsonify([gift.to_dict() for gift in gifts])
+    return jsonify(gifts)
 
-@api_bp.route('/users/reserve-gifts', methods=['POST'])
-def reserve_gifts():
+""" 
+    usuario faz a reserva
+"""
+
+@api_bp.route('/users/reserve-gift', methods=['POST'])
+@token_required
+def reserve_gifts(current_user):
 
     data = request.get_json() or {}
 
-    if 'user_id' not in data or 'gift_id' not in data:
-        return jsonify({'error': 'User ID and Gift ID are required'}), 400
-    
-    user = User.query.get(data['user_id'])
+    if 'gift_id' not in data:
+        return jsonify({'error': 'Gift ID is required'}), 400
+
     gift = Gift.query.get(data['gift_id'])
 
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
     if not gift:
         return jsonify({'error': 'Gift not found'}), 404
     if gift.reserved:
         return jsonify({'error': 'Gift is already reserved'}), 400
+    
+    token = jwt.encode(
+        {
+            'gift_id': gift.id,
+            'user_id': current_user.id,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+        },
+        Config.SECRET_KEY,
+        algorithm="HS256"
+    )
 
-    # Criando a reserva
+    confirm_url = url_for('api.confirm_reservation', token=token, _external=True)
+
+    msg = Message('Confirme sua reserva',
+                  sender='nathaliacolares20@gmail.com',
+                  recipients=[current_user.email])
+    
+    msg.body = (
+        f'Olá, {current_user.name}!\n\n'
+        f'Clique no link abaixo para confirmar a reserva do presente:\n{confirm_url}\n\n'
+        'Se não foi você, ignore este e-mail.'
+    )
+
+    mail.send(msg)
+
+    return jsonify({'message': 'Gift reserved successfully. Check your email for confirmation.'}), 201
+
+
+""" 
+    usuario confirma a reserva
+"""
+
+@api_bp.route('/confirm-reservation/<token>', methods=['GET'])
+def confirm_reservation(token):
+    try:
+        data = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
+        gift_id = data['gift_id']
+        user_id = data['user_id']
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token expired!'}), 400
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token!'}), 400
+
+    gift = Gift.query.get(gift_id)
+    user = User.query.get(user_id)
+
+    if not gift:
+        return jsonify({'error': 'Gift not found'}), 404
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    if gift.reserved:
+        return jsonify({'error': 'Gift is already reserved'}), 400
+
+    # Criação da reserva
     reservation = ReservedGift(user_id=user.id, gift_id=gift.id)
-    gift.reserved = True  # Atualiza o status do presente para reservado
-
     db.session.add(reservation)
+
+    # Atualiza status do presente
+    gift.reserved = True
     db.session.commit()
 
-    return jsonify({'message': 'Gift reserved successfully', 'reservation': reservation.id}), 201
+    return jsonify({'message': 'Gift reservation confirmed!'}), 200
+
+""" 
+Usuario administrador
+"""
+
 
 @api_bp.route('/user/logout')
 def logout():
