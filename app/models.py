@@ -83,7 +83,7 @@ class ReservedGift(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     gift_id = db.Column(db.Integer, db.ForeignKey('gifts.id', ondelete='CASCADE'), nullable=False)
     confirmed = db.Column(db.Boolean, default=False)
-    confirmation_token = db.Column(db.String(100), unique=True, nullable=True, default=lambda: str(uuid.uuid4()))
+    confirmation_token = db.Column(db.String(512), unique=True, nullable=True, default=lambda: str(uuid.uuid4()))
 
     user = db.relationship('User', back_populates='reservations')
     gift = db.relationship('Gift', back_populates='reservations')

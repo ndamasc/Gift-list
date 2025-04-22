@@ -5,13 +5,12 @@ import jwt
 from app.config import Config
 
 def admin_required(f):
+    @token_required
     @wraps(f)
-    def decorated_function(*args, **kwargs):
-        user_id = request.headers.get('X-User-ID')  # ou use session, token etc.
-        user = User.query.get(user_id)
-        if not user or not user.is_admin:
+    def decorated_function(current_user, *args, **kwargs):
+        if not current_user or not current_user.is_root:
             return jsonify({'error': 'Acesso negado: apenas administradores'}), 403
-        return f(*args, **kwargs)
+        return f(current_user, *args, **kwargs)
     return decorated_function
 
 

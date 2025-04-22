@@ -214,6 +214,19 @@ def reserve_gifts(current_user):
         algorithm="HS256"
     )
 
+    reservation = ReservedGift(
+        user_id=current_user.id,
+        gift_id=gift.id,
+        confirmation_token=token,
+        confirmed=False
+    )
+
+    db.session.add(reservation)
+    db.session.commit()
+
+    print(f"[DEBUG] Reserva criada: user_id={current_user.id}, gift_id={gift.id}, token={token}")
+
+
     confirm_url = url_for('api.confirm_reservation', token=token, _external=True)
 
     msg = Message('Confirme sua reserva',
@@ -255,16 +268,24 @@ def confirm_reservation(token):
         return jsonify({'error': 'User not found'}), 404
     if gift.reserved:
         return jsonify({'error': 'Gift is already reserved'}), 400
+    
+    print(f"[DEBUG] Tentando confirmar reserva: user_id={user.id}, gift_id={gift.id}, token={token}")
 
     # Criação da reserva
-    reservation = ReservedGift(user_id=user.id, gift_id=gift.id)
-    db.session.add(reservation)
+    reservation = ReservedGift.query.filter_by(user_id=user.id, gift_id=gift.id, confirmation_token=token, confirmed=False).first() 
 
-    # Atualiza status do presente
+    print(f"[DEBUG] Reservation encontrada: {reservation}") if reservation else print("[DEBUG] Nenhuma reserva encontrada.")
+    
+    if not reservation:
+        return jsonify({'error': 'Reservation not found or already confirmed'}), 404
+
+    reservation.confirmed = True
     gift.reserved = True
+
     db.session.commit()
 
     return jsonify({'message': 'Gift reservation confirmed!'}), 200
+
 
 """ 
 Usuario administrador
