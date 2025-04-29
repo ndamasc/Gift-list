@@ -132,7 +132,7 @@ def get_gift(id):
 
 @api_bp.route('/gifts', methods=['POST'])
 @admin_required
-def create_gift():
+def create_gift(current_user):
     data = request.get_json() or {}
     
     if 'gift_title' not in data:
