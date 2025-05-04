@@ -124,6 +124,46 @@ def get_gift(id):
     return jsonify(gift.to_dict())
 
 
+"""
+criando rota para add admin
+
+"""
+
+@api_bp.route('/create-admin', methods=['POST'])
+def create_admin():
+    data = request.get_json() or {}
+
+    if 'name' not in data or 'email' not in data:
+        return jsonify({'error': 'Name and email are required'}), 400
+    
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'error': 'Email already exists'}), 400
+    
+    if 'password' not in data or not data['password'].strip():
+        return jsonify({'error': 'A password is required'}), 400
+    
+
+    admin_user = User(
+        name=data['name'],
+        email=data['email'],
+        is_root=True
+    )
+
+    if not admin_user.check_email_is_valid(data['email']):
+        return jsonify({'error': 'Email format not valid'}), 400
+    
+    admin_user.set_password(data['password'])
+
+    db.session.add(admin_user)
+    db.session.commit()
+
+    return jsonify({'message': 'Admin user created successfully', 'user': admin_user.to_dict()}), 201
+
+
+### rota de recuperacao de senha
+
+
+
 
 """'''
     criando rotas de presentes

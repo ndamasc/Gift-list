@@ -1,4 +1,5 @@
 from datetime import datetime
+from itsdangerous import URLSafeSerializer
 import re
 from flask_bcrypt import Bcrypt
 from app import db
@@ -42,6 +43,9 @@ class User(db.Model):
     def check_email_is_valid(self, email):
         email_rgx = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
         return re.match(email_rgx, email) is not None
+    
+    def get_reset_token(self, expires_sec=1800):
+        s = URLSafeSerializer(cur)
     
 
     @classmethod
